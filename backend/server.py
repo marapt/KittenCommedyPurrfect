@@ -233,8 +233,8 @@ async def create_video_project(request: CreateVideoRequest):
         logging.error(f"Error creating video project: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
-async def generate_video_background(project_id: str, script: str):
-    """Background task to generate video"""
+async def generate_video_background(project_id: str, script: str, title: str):
+    """Background task to generate real video with TTS and images"""
     try:
         # Update status to generating
         await db.video_projects.update_one(
@@ -242,25 +242,20 @@ async def generate_video_background(project_id: str, script: str):
             {"$set": {"status": "generating", "updatedAt": datetime.now(timezone.utc).isoformat()}}
         )
         
-        # Simulate video generation by copying test file
-        await asyncio.sleep(2)
+        # Initialize video generator
+        video_gen = VideoGenerator()
         
-        # Create video file (currently using test sample)
-        video_dir = ROOT_DIR / "generated_videos"
-        video_dir.mkdir(exist_ok=True)
-        output_path = video_dir / f"{project_id}.mp4"
+        # Generate real video
+        output_path = await video_gen.generate_video(
+            project_id=project_id,
+            script=script,
+            title=title
+        )
         
-        # Copy test sample to project video
-        test_sample = video_dir / "test_sample.mp4"
-        if not test_sample.exists():
-            raise Exception("Test sample video not found")
-        
-        shutil.copy(test_sample, output_path)
-        
-        # Verify file size (must be at least 50KB for valid video)
+        # Verify file size (must be at least 100KB for valid video)
         file_size = output_path.stat().st_size
-        if file_size < 50000:  # 50KB minimum
-            raise Exception(f"Generated video too small: {file_size} bytes. Expected >50KB")
+        if file_size < 100000:  # 100KB minimum
+            raise Exception(f"Generated video too small: {file_size} bytes. Expected >100KB")
         
         logger.info(f"Video file created: {output_path} ({file_size:,} bytes)")
         
