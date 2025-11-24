@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, HTTPException
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -6,10 +6,12 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
-from typing import List
+from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
-
+from newsapi import NewsApiClient
+from emergentintegrations.llm.chat import LlmChat, UserMessage
+import asyncio
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,51 +22,268 @@ client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
-app = FastAPI()
+app = FastAPI(title="Kitten Comedy API", version="1.0.0")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# Initialize services
+news_client = NewsApiClient(api_key=os.environ.get('NEWS_API_KEY', ''))
+emergent_key = os.environ.get('EMERGENT_LLM_KEY', '')
 
-# Define Models
-class StatusCheck(BaseModel):
-    model_config = ConfigDict(extra="ignore")  # Ignore MongoDB's _id field
-    
+# Models
+class NewsArticle(BaseModel):
+    model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    client_name: str
-    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    title: str
+    description: Optional[str] = None
+    url: str
+    urlToImage: Optional[str] = None
+    publishedAt: str
+    source: dict
+    content: Optional[str] = None
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-class StatusCheckCreate(BaseModel):
-    client_name: str
+class ComedyScript(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    articleId: str
+    script: str
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
-# Add your routes to the router instead of directly to app
+class VideoProject(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    title: str
+    scriptId: str
+    articleId: str
+    status: str = "pending"  # pending, generating, completed, failed
+    videoUrl: Optional[str] = None
+    errorMessage: Optional[str] = None
+    createdAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updatedAt: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+class GenerateScriptRequest(BaseModel):
+    articleId: str
+    articleTitle: str
+    articleDescription: str
+
+class CreateVideoRequest(BaseModel):
+    scriptId: str
+    title: str
+
+# API Endpoints
 @api_router.get("/")
 async def root():
-    return {"message": "Hello World"}
+    return {"message": "Kitten Comedy Purrfect API", "version": "1.0.0"}
 
-@api_router.post("/status", response_model=StatusCheck)
-async def create_status_check(input: StatusCheckCreate):
-    status_dict = input.model_dump()
-    status_obj = StatusCheck(**status_dict)
-    
-    # Convert to dict and serialize datetime to ISO string for MongoDB
-    doc = status_obj.model_dump()
-    doc['timestamp'] = doc['timestamp'].isoformat()
-    
-    _ = await db.status_checks.insert_one(doc)
-    return status_obj
+@api_router.get("/news/trending", response_model=List[NewsArticle])
+async def get_trending_news(category: str = "general", country: str = "us"):
+    """Fetch trending news articles"""
+    try:
+        if not os.environ.get('NEWS_API_KEY'):
+            raise HTTPException(status_code=500, detail="News API key not configured")
+        
+        # Fetch top headlines
+        response = news_client.get_top_headlines(
+            category=category,
+            country=country,
+            page_size=20
+        )
+        
+        if response['status'] != 'ok':
+            raise HTTPException(status_code=500, detail="Failed to fetch news")
+        
+        articles = []
+        for article in response['articles']:
+            news_article = NewsArticle(
+                title=article['title'],
+                description=article.get('description', ''),
+                url=article['url'],
+                urlToImage=article.get('urlToImage'),
+                publishedAt=article['publishedAt'],
+                source=article['source'],
+                content=article.get('content', '')
+            )
+            articles.append(news_article)
+            
+            # Save to database
+            doc = news_article.model_dump()
+            doc['createdAt'] = doc['createdAt'].isoformat()
+            await db.news_articles.update_one(
+                {'title': news_article.title},
+                {'$set': doc},
+                upsert=True
+            )
+        
+        return articles
+    except Exception as e:
+        logging.error(f"Error fetching news: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.get("/status", response_model=List[StatusCheck])
-async def get_status_checks():
-    # Exclude MongoDB's _id field from the query results
-    status_checks = await db.status_checks.find({}, {"_id": 0}).to_list(1000)
-    
-    # Convert ISO string timestamps back to datetime objects
-    for check in status_checks:
-        if isinstance(check['timestamp'], str):
-            check['timestamp'] = datetime.fromisoformat(check['timestamp'])
-    
-    return status_checks
+@api_router.post("/scripts/generate", response_model=ComedyScript)
+async def generate_comedy_script(request: GenerateScriptRequest):
+    """Generate a comedy script from a news article using AI"""
+    try:
+        if not emergent_key:
+            raise HTTPException(status_code=500, detail="Emergent LLM key not configured")
+        
+        # Create AI prompt
+        prompt = f"""You are a comedy writer for a YouTube channel called 'Kitten Comedy Purrfect' that creates humorous content combining news with cat-themed comedy.
+
+News Article:
+Title: {request.articleTitle}
+Description: {request.articleDescription}
+
+Create a funny, engaging 60-90 second comedy script that:
+1. Takes this news story and adds humorous cat-themed commentary
+2. Uses puns, wordplay, and feline humor
+3. Imagines how cats would react to or be involved in this news
+4. Keeps it light, witty, and family-friendly
+5. Includes stage directions for visuals (like [show cat looking confused])
+
+Format the script as a narrator's voiceover with stage directions.
+
+Script:"""
+        
+        # Generate script using OpenAI via Emergent
+        chat = LlmChat(
+            api_key=emergent_key,
+            session_id=f"script_{request.articleId}",
+            system_message="You are a professional comedy writer specializing in cat-themed humor."
+        ).with_model("openai", "gpt-5.1")
+        
+        user_message = UserMessage(text=prompt)
+        response = await chat.send_message(user_message)
+        
+        script_text = response.strip()
+        
+        # Save script to database
+        comedy_script = ComedyScript(
+            articleId=request.articleId,
+            script=script_text
+        )
+        
+        doc = comedy_script.model_dump()
+        doc['createdAt'] = doc['createdAt'].isoformat()
+        await db.comedy_scripts.insert_one(doc)
+        
+        return comedy_script
+    except Exception as e:
+        logging.error(f"Error generating script: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/scripts", response_model=List[ComedyScript])
+async def get_scripts():
+    """Get all comedy scripts"""
+    try:
+        scripts = await db.comedy_scripts.find({}, {"_id": 0}).sort("createdAt", -1).to_list(100)
+        for script in scripts:
+            if isinstance(script['createdAt'], str):
+                script['createdAt'] = datetime.fromisoformat(script['createdAt'])
+        return scripts
+    except Exception as e:
+        logging.error(f"Error fetching scripts: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/videos/create", response_model=VideoProject)
+async def create_video_project(request: CreateVideoRequest):
+    """Create a video project (placeholder for video generation)"""
+    try:
+        # Get the script
+        script_doc = await db.comedy_scripts.find_one({"id": request.scriptId}, {"_id": 0})
+        if not script_doc:
+            raise HTTPException(status_code=404, detail="Script not found")
+        
+        # Create video project
+        video_project = VideoProject(
+            title=request.title,
+            scriptId=request.scriptId,
+            articleId=script_doc['articleId'],
+            status="pending"
+        )
+        
+        doc = video_project.model_dump()
+        doc['createdAt'] = doc['createdAt'].isoformat()
+        doc['updatedAt'] = doc['updatedAt'].isoformat()
+        await db.video_projects.insert_one(doc)
+        
+        # Trigger background video generation
+        asyncio.create_task(generate_video_background(video_project.id, script_doc['script']))
+        
+        return video_project
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error creating video project: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+async def generate_video_background(project_id: str, script: str):
+    """Background task to generate video"""
+    try:
+        # Update status to generating
+        await db.video_projects.update_one(
+            {"id": project_id},
+            {"$set": {"status": "generating", "updatedAt": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        # Simulate video generation (will implement actual generation later)
+        await asyncio.sleep(2)
+        
+        # Update status to completed
+        await db.video_projects.update_one(
+            {"id": project_id},
+            {"$set": {
+                "status": "completed",
+                "videoUrl": f"/videos/{project_id}.mp4",
+                "updatedAt": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+    except Exception as e:
+        logging.error(f"Error generating video: {str(e)}")
+        await db.video_projects.update_one(
+            {"id": project_id},
+            {"$set": {
+                "status": "failed",
+                "errorMessage": str(e),
+                "updatedAt": datetime.now(timezone.utc).isoformat()
+            }}
+        )
+
+@api_router.get("/videos", response_model=List[VideoProject])
+async def get_video_projects():
+    """Get all video projects"""
+    try:
+        projects = await db.video_projects.find({}, {"_id": 0}).sort("createdAt", -1).to_list(100)
+        for project in projects:
+            if isinstance(project['createdAt'], str):
+                project['createdAt'] = datetime.fromisoformat(project['createdAt'])
+            if isinstance(project['updatedAt'], str):
+                project['updatedAt'] = datetime.fromisoformat(project['updatedAt'])
+        return projects
+    except Exception as e:
+        logging.error(f"Error fetching video projects: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/videos/{project_id}", response_model=VideoProject)
+async def get_video_project(project_id: str):
+    """Get a specific video project"""
+    try:
+        project = await db.video_projects.find_one({"id": project_id}, {"_id": 0})
+        if not project:
+            raise HTTPException(status_code=404, detail="Video project not found")
+        
+        if isinstance(project['createdAt'], str):
+            project['createdAt'] = datetime.fromisoformat(project['createdAt'])
+        if isinstance(project['updatedAt'], str):
+            project['updatedAt'] = datetime.fromisoformat(project['updatedAt'])
+        
+        return project
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error fetching video project: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # Include the router in the main app
 app.include_router(api_router)
