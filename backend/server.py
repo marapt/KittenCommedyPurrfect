@@ -239,9 +239,17 @@ async def generate_video_background(project_id: str, script: str):
         
         # Copy test sample to project video
         test_sample = video_dir / "test_sample.mp4"
-        if test_sample.exists():
-            shutil.copy(test_sample, output_path)
-            logger.info(f"Video file created: {output_path}")
+        if not test_sample.exists():
+            raise Exception("Test sample video not found")
+        
+        shutil.copy(test_sample, output_path)
+        
+        # Verify file size (must be at least 50KB for valid video)
+        file_size = output_path.stat().st_size
+        if file_size < 50000:  # 50KB minimum
+            raise Exception(f"Generated video too small: {file_size} bytes. Expected >50KB")
+        
+        logger.info(f"Video file created: {output_path} ({file_size:,} bytes)")
         
         # Update status to completed
         await db.video_projects.update_one(
