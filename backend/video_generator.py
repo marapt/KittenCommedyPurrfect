@@ -209,29 +209,28 @@ class VideoGenerator:
         """
         try:
             txt_clip = TextClip(
-                "Subscribe for more\ncat comedy! 🐱",
-                fontsize=70,
+                text="Subscribe for more\ncat comedy! 🐱",
+                font_size=70,
                 color='white',
-                font='Arial-Bold',
                 size=(1080, 1920),
-                method='caption',
-                align='center'
-            ).set_duration(duration)
+                method='caption'
+            ).with_duration(duration).with_position('center')
             
-            bg_clip = ImageClip(
-                self._create_solid_color_image((1080, 1920), (139, 0, 255)),
+            bg_clip = ColorClip(
+                size=(1080, 1920),
+                color=(139, 0, 255),
                 duration=duration
             )
             
-            outro = CompositeVideoClip([bg_clip, txt_clip.set_position('center')])
-            outro = outro.set_duration(duration)
+            outro = CompositeVideoClip([bg_clip, txt_clip])
             
             return outro
             
         except Exception as e:
             logger.error(f"Outro creation failed: {str(e)}")
-            return ImageClip(
-                self._create_solid_color_image((1080, 1920), (139, 0, 255)),
+            return ColorClip(
+                size=(1080, 1920),
+                color=(139, 0, 255),
                 duration=duration
             )
     
