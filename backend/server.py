@@ -224,7 +224,11 @@ async def create_video_project(request: CreateVideoRequest):
         await db.video_projects.insert_one(doc)
         
         # Trigger background video generation
-        asyncio.create_task(generate_video_background(video_project.id, script_doc['script']))
+        asyncio.create_task(generate_video_background(
+            video_project.id,
+            script_doc['script'],
+            request.title
+        ))
         
         return video_project
     except HTTPException:
