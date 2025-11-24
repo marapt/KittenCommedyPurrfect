@@ -173,34 +173,33 @@ class VideoGenerator:
         Create a simple intro with text animation
         """
         try:
-            # Create text clip
+            # Create text clip with MoviePy 2.x syntax
             txt_clip = TextClip(
-                "Kitten Comedy\nPurrfect",
-                fontsize=80,
+                text="Kitten Comedy\nPurrfect",
+                font_size=80,
                 color='white',
-                font='Arial-Bold',
                 size=(1080, 1920),
-                method='caption',
-                align='center'
-            ).set_duration(duration)
+                method='caption'
+            ).with_duration(duration).with_position('center')
             
-            # Create purple background
-            bg_clip = ImageClip(
-                self._create_solid_color_image((1080, 1920), (139, 0, 255)),
+            # Create purple background using ColorClip
+            bg_clip = ColorClip(
+                size=(1080, 1920),
+                color=(139, 0, 255),
                 duration=duration
             )
             
             # Composite
-            intro = CompositeVideoClip([bg_clip, txt_clip.set_position('center')])
-            intro = intro.set_duration(duration)
+            intro = CompositeVideoClip([bg_clip, txt_clip])
             
             return intro
             
         except Exception as e:
             logger.error(f"Intro creation failed: {str(e)}")
             # Return simple colored clip as fallback
-            return ImageClip(
-                self._create_solid_color_image((1080, 1920), (139, 0, 255)),
+            return ColorClip(
+                size=(1080, 1920),
+                color=(139, 0, 255),
                 duration=duration
             )
     
