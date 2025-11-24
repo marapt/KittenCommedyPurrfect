@@ -293,9 +293,14 @@ function App() {
                       <div className="text-center py-8 bg-gray-900 bg-opacity-50 rounded-lg">
                         <div className="text-4xl mb-2">🎥</div>
                         <p className="text-purple-300 text-sm mb-4">Video ready for manual upload to YouTube Studio</p>
-                        <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-all" data-testid="download-video-btn">
+                        <a
+                          href={`${API}${project.videoUrl}`}
+                          download={`${project.title}.mp4`}
+                          className="inline-block px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-500 transition-all"
+                          data-testid="download-video-btn"
+                        >
                           📥 Download Video
-                        </button>
+                        </a>
                       </div>
                     )}
                     {project.status === 'failed' && (
