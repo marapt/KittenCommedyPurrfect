@@ -324,23 +324,43 @@ class VideoGenerator:
             # Composite final video with audio
             final_video = final_video.with_audio(audio_clip)
             
-            # Export
+            # Export with memory optimization
             output_path = self.output_dir / f"{project_id}.mp4"
             final_video.write_videofile(
                 str(output_path),
                 fps=30,
                 codec='libx264',
                 audio_codec='aac',
-                preset='medium',
-                threads=4,
+                preset='ultrafast',  # Faster encoding, less memory
+                threads=2,  # Reduced threads to save memory
+                bitrate='500k',  # Lower bitrate for Shorts
                 logger=None  # Suppress moviepy logs
             )
             
-            # Cleanup
-            final_video.close()
-            audio_clip.close()
-            for clip in all_clips:
-                clip.close()
+            # Aggressive cleanup to free memory
+            try:
+                final_video.close()
+                audio_clip.close()
+                for clip in all_clips:
+                    try:
+                        clip.close()
+                    except:
+                        pass
+                for clip in scene_clips:
+                    try:
+                        clip.close()
+                    except:
+                        pass
+            except Exception as e:
+                logger.warning(f"Cleanup warning: {e}")
+            
+            # Clean up temp files
+            try:
+                import glob
+                for f in glob.glob(str(self.temp_dir / f"{project_id}*")):
+                    Path(f).unlink(missing_ok=True)
+            except Exception as e:
+                logger.warning(f"Temp cleanup warning: {e}")
             
             logger.info(f"Video generation complete: {output_path}")
             return output_path
