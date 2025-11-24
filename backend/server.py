@@ -298,6 +298,35 @@ async def get_video_project(project_id: str):
         logging.error(f"Error fetching video project: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.get("/videos/{project_id}/download")
+async def download_video(project_id: str):
+    """Download the generated video file"""
+    try:
+        # Get project details
+        project = await db.video_projects.find_one({"id": project_id}, {"_id": 0})
+        if not project:
+            raise HTTPException(status_code=404, detail="Video project not found")
+        
+        if project['status'] != 'completed':
+            raise HTTPException(status_code=400, detail=f"Video is not ready. Status: {project['status']}")
+        
+        # Check if video file exists
+        video_path = ROOT_DIR / "generated_videos" / f"{project_id}.mp4"
+        if not video_path.exists():
+            raise HTTPException(status_code=404, detail="Video file not found")
+        
+        # Return file for download
+        return FileResponse(
+            path=str(video_path),
+            media_type="video/mp4",
+            filename=f"{project['title']}.mp4"
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Error downloading video: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Include the router in the main app
 app.include_router(api_router)
 
