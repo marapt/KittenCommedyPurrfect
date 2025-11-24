@@ -13,11 +13,10 @@ import requests
 
 from emergentintegrations.llm.openai import OpenAITextToSpeech
 from emergentintegrations.llm.openai.image_generation import OpenAIImageGeneration
-from moviepy.editor import (
+from moviepy import (
     VideoFileClip, ImageClip, AudioFileClip, TextClip,
-    CompositeVideoClip, concatenate_videoclips, CompositeAudioClip
+    CompositeVideoClip, concatenate_videoclips, CompositeAudioClip, ColorClip
 )
-from moviepy.video.fx.resize import resize
 
 logger = logging.getLogger(__name__)
 
