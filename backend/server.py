@@ -229,15 +229,26 @@ async def generate_video_background(project_id: str, script: str):
             {"$set": {"status": "generating", "updatedAt": datetime.now(timezone.utc).isoformat()}}
         )
         
-        # Simulate video generation (will implement actual generation later)
+        # Simulate video generation by copying test file
         await asyncio.sleep(2)
+        
+        # Create video file (currently using test sample)
+        video_dir = ROOT_DIR / "generated_videos"
+        video_dir.mkdir(exist_ok=True)
+        output_path = video_dir / f"{project_id}.mp4"
+        
+        # Copy test sample to project video
+        test_sample = video_dir / "test_sample.mp4"
+        if test_sample.exists():
+            shutil.copy(test_sample, output_path)
+            logger.info(f"Video file created: {output_path}")
         
         # Update status to completed
         await db.video_projects.update_one(
             {"id": project_id},
             {"$set": {
                 "status": "completed",
-                "videoUrl": f"/videos/{project_id}.mp4",
+                "videoUrl": f"/api/videos/{project_id}/download",
                 "updatedAt": datetime.now(timezone.utc).isoformat()
             }}
         )
