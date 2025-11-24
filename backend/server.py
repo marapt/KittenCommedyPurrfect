@@ -130,21 +130,33 @@ async def generate_comedy_script(request: GenerateScriptRequest):
         if not emergent_key:
             raise HTTPException(status_code=500, detail="Emergent LLM key not configured")
         
-        # Create AI prompt
-        prompt = f"""You are a comedy writer for a YouTube channel called 'Kitten Comedy Purrfect' that creates humorous content combining news with cat-themed comedy.
+        # Create AI prompt optimized for YouTube Shorts
+        prompt = f"""You are a comedy writer for a YouTube Shorts channel called 'Kitten Comedy Purrfect' that creates viral cat-themed comedy news.
 
 News Article:
 Title: {request.articleTitle}
 Description: {request.articleDescription}
 
-Create a funny, engaging 60-90 second comedy script that:
-1. Takes this news story and adds humorous cat-themed commentary
-2. Uses puns, wordplay, and feline humor
-3. Imagines how cats would react to or be involved in this news
-4. Keeps it light, witty, and family-friendly
-5. Includes stage directions for visuals (like [show cat looking confused])
+Create a punchy, viral-ready 60-second YouTube Shorts script that:
+1. HOOK (first 3 seconds): Start with an attention-grabbing statement
+2. NEWS + HUMOR: Present the news with cat-themed comedy twists
+3. VISUAL CUES: Include [SCENE: description] markers for each visual scene
+4. PACING: Keep sentences short and punchy for fast pacing
+5. ENDING: End with a memorable punchline or call-to-action
 
-Format the script as a narrator's voiceover with stage directions.
+Format as:
+[SCENE: description]
+Narrator text here.
+
+[SCENE: description]
+Next narrator text.
+
+Requirements:
+- Maximum 150 words (60 seconds when spoken)
+- 4-6 distinct scenes
+- Cat puns and wordplay throughout
+- Family-friendly
+- Viral potential
 
 Script:"""
         
