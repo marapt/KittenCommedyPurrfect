@@ -14,6 +14,7 @@ from newsapi import NewsApiClient
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 import asyncio
 import shutil
+from video_generator import VideoGenerator
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
