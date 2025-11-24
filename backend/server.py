@@ -246,8 +246,8 @@ async def generate_video_background(project_id: str, script: str, title: str):
             {"$set": {"status": "generating", "updatedAt": datetime.now(timezone.utc).isoformat()}}
         )
         
-        # Initialize video generator
-        video_gen = VideoGenerator()
+        # Initialize optimized video generator
+        video_gen = VideoGeneratorOptimized()
         
         # Generate real video
         output_path = await video_gen.generate_video(
