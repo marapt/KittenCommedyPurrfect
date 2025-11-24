@@ -294,13 +294,15 @@ class VideoGenerator:
                 if image_path.exists():
                     img_clip = ImageClip(str(image_path), duration=scene_duration)
                     # Resize to vertical format (9:16 for Shorts)
-                    img_clip = img_clip.resize(height=1920)
+                    # In MoviePy 2.x, use with_effects instead of direct resize
+                    from moviepy import vfx
+                    img_clip = img_clip.with_effects([vfx.Resize(height=1920)])
                     if img_clip.w > 1080:
-                        img_clip = img_clip.crop(
-                            x_center=img_clip.w/2,
-                            width=1080,
-                            height=1920
-                        )
+                        # Crop to center
+                        x_start = (img_clip.w - 1080) // 2
+                        img_clip = img_clip.with_effects([
+                            vfx.Crop(x1=x_start, width=1080, y1=0, height=1920)
+                        ])
                     scene_clips.append(img_clip)
                 else:
                     # Fallback: solid color with text
