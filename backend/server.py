@@ -248,7 +248,7 @@ async def generate_video_background(project_id: str, script: str):
             {"id": project_id},
             {"$set": {
                 "status": "completed",
-                "videoUrl": f"/api/videos/{project_id}/download",
+                "videoUrl": f"/videos/{project_id}/download",
                 "updatedAt": datetime.now(timezone.utc).isoformat()
             }}
         )
