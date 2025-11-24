@@ -318,10 +318,11 @@ class VideoGenerator:
             
             # Add audio to the main content (skip intro/outro)
             audio_clip = AudioFileClip(str(audio_path))
-            audio_clip = audio_clip.set_start(1.5)  # Start after intro
+            # In MoviePy 2.x, use with_start instead of set_start
+            audio_clip = audio_clip.with_start(1.5)  # Start after intro
             
             # Composite final video with audio
-            final_video = final_video.set_audio(audio_clip)
+            final_video = final_video.with_audio(audio_clip)
             
             # Export
             output_path = self.output_dir / f"{project_id}.mp4"
